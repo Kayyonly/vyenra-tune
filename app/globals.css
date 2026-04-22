@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  @keyframes marquee {
+    0%, 15% {
+      transform: translateX(0);
+    }
+    85%, 100% {
+      transform: translateX(calc(-50% - 1rem));
+    }
+  }
+
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    50% { transform: translateX(4px); }
+    75% { transform: translateX(-3px); }
+  }
+
+  
+  .animate-marquee {
+    animation: marquee 12s linear infinite;
+  }
+
+  @keyframes authFade {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

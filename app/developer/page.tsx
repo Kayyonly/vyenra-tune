@@ -1,0 +1,165 @@
+'use client';
+
+import { useState } from 'react';
+import Image from 'next/image';
+import { ArrowLeft, Globe, Instagram, Twitter, Coffee, Download, Tv, CheckCircle2, Share2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { motion } from 'motion/react';
+import { usePWAInstall } from '@/hooks/usePWAInstall';
+
+export default function DeveloperPage() {
+  const router = useRouter();
+  const { hasPrompt, isIOS, isStandalone, installPWA } = usePWAInstall();
+  const [showHowToInstall, setShowHowToInstall] = useState(false);
+
+  const helperText = isStandalone
+    ? 'Aplikasi ini sudah berjalan dalam mode terpasang (standalone).'
+    : isIOS
+      ? 'iOS: Tap Share → Add to Home Screen'
+      : hasPrompt
+        ? 'Perangkat ini mendukung install langsung.'
+        : 'Browser ini tidak memunculkan otomatis. Gunakan menu browser untuk Add to Home Screen.';
+
+  const handleInstallClick = async () => {
+    if (isStandalone) return;
+
+    if (hasPrompt) {
+      await installPWA();
+      return;
+    }
+
+    setShowHowToInstall(true);
+  };
+
+  return (
+    <main className="min-h-screen pb-24">
+      <div className="sticky top-0 z-10 bg-black/50 backdrop-blur-md pt-6 pb-4 px-4 flex items-center gap-4">
+        <button onClick={() => router.back()} className="text-white hover:bg-white/10 p-2 rounded-full transition-colors">
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+        <h1 className="text-xl font-medium text-white">Tentang</h1>
+      </div>
+
+      <div className="px-6 pt-6">
+        <h2 className="text-[#4ADE80] text-sm font-medium mb-8">Lead Developer</h2>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center text-center space-y-6"
+        >
+          {/* Blob Avatar */}
+          <div className="relative w-48 h-48 mb-2">
+            <div className="absolute inset-0 bg-[#1A2E23] rounded-[40%_60%_70%_30%_/_40%_50%_60%_50%] animate-[blob_8s_ease-in-out_infinite] scale-110" />
+            <div className="absolute inset-0 bg-[#224032] rounded-[60%_40%_30%_70%_/_50%_60%_40%_50%] animate-[blob_8s_ease-in-out_infinite_reverse] scale-105" />
+            <div className="relative w-full h-full rounded-[50%_50%_40%_60%_/_60%_40%_50%_50%] overflow-hidden border-2 border-[#4ADE80]/20 z-10">
+              <Image
+                src="https://f.top4top.io/p_3733w0g4e0.jpg"
+                alt="Kayy Official"
+                fill
+                sizes="192px"
+                className="object-cover"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <h2 className="text-2xl font-bold text-white">Kayy Official</h2>
+            <CheckCircle2 className="w-6 h-6 text-blue-500 fill-blue-500/20" />
+          </div>
+
+          <p className="text-white/60 text-sm leading-relaxed max-w-sm mb-6">
+            Platform streaming musik modern gratis tanpa iklan. Nikmati jutaan lagu, buat daftar putar Anda sendiri, dan temukan musik baru setiap hari dengan kualitas audio premium tanpa batasan.
+          </p>
+
+          {/* Social Links Grid */}
+          <div className="grid grid-cols-4 gap-3 w-full max-w-sm mb-4">
+            <a href="#" className="flex flex-col items-center justify-center gap-2 bg-[#1C1C1E] hover:bg-[#2C2C2E] p-4 rounded-2xl transition-colors">
+              <Globe className="w-6 h-6 text-white" />
+              <span className="text-[10px] text-white/70 font-medium">Website</span>
+            </a>
+            <a href="https://kayydeveloper.netlify.app/" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center gap-2 bg-[#1C1C1E] hover:bg-[#2C2C2E] p-4 rounded-2xl transition-colors">
+              <Tv className="w-6 h-6 text-white" />
+              <span className="text-[10px] text-white/70 font-medium">Personal Website</span>
+            </a>
+            <a href="#" className="flex flex-col items-center justify-center gap-2 bg-[#1C1C1E] hover:bg-[#2C2C2E] p-4 rounded-2xl transition-colors">
+              <Twitter className="w-6 h-6 text-white" />
+              <span className="text-[10px] text-white/70 font-medium">X</span>
+            </a>
+            <a href="#" className="flex flex-col items-center justify-center gap-2 bg-[#1C1C1E] hover:bg-[#2C2C2E] p-4 rounded-2xl transition-colors">
+              <Instagram className="w-6 h-6 text-white" />
+              <span className="text-[10px] text-white/70 font-medium">Instagram</span>
+            </a>
+          </div>
+
+          {/* Buy me a coffee */}
+          <a
+            href="https://sociabuzz.com/kayyofficial"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full max-w-sm flex items-center gap-4 bg-[#1C1C1E] hover:bg-[#2C2C2E] p-5 rounded-3xl transition-colors mb-8"
+          >
+            <div className="w-12 h-12 rounded-full bg-[#224032] flex items-center justify-center shrink-0">
+              <Coffee className="w-6 h-6 text-[#4ADE80]" />
+            </div>
+            <div className="text-left">
+              <div className="text-white font-medium">Like what I do?</div>
+              <div className="text-white/50 text-sm">Buy me a coffee</div>
+            </div>
+          </a>
+
+          {/* Install PWA */}
+          <div className="w-full max-w-sm space-y-3">
+              <button
+                onClick={() => {
+                  void handleInstallClick();
+                }}
+                disabled={isStandalone}
+                className="w-full flex items-center justify-center gap-3 bg-[#1C1C1E] hover:bg-[#2C2C2E] disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-4 px-6 rounded-2xl transition-colors border border-white/5"
+              >
+                <Download className="w-5 h-5" />
+                <span>{isStandalone ? 'App Sudah Terpasang' : 'Install App'}</span>
+              </button>
+
+              <p className="text-xs text-white/60">{helperText}</p>
+
+              {!hasPrompt && !isStandalone && (
+                <button
+                  onClick={() => setShowHowToInstall((prev) => !prev)}
+                  className="w-full rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2 text-xs text-white/75 hover:bg-white/[0.06] transition-colors"
+                >
+                  {showHowToInstall ? 'Sembunyikan cara install' : 'How to install'}
+                </button>
+              )}
+
+              {showHowToInstall && (
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left">
+                  {isIOS ? (
+                    <ol className="space-y-2 text-xs text-white/80">
+                      <li className="flex items-start gap-2"><span>1.</span><span>Tap <Share2 className="inline w-3.5 h-3.5" /> Share di Safari.</span></li>
+                      <li className="flex items-start gap-2"><span>2.</span><span>Pilih <strong>Add to Home Screen</strong>.</span></li>
+                      <li className="flex items-start gap-2"><span>3.</span><span>Tap <strong>Add</strong>.</span></li>
+                    </ol>
+                  ) : (
+                    <ol className="space-y-2 text-xs text-white/80">
+                      <li className="flex items-start gap-2"><span>1.</span><span>Buka menu browser (⋮ / ⋯).</span></li>
+                      <li className="flex items-start gap-2"><span>2.</span><span>Pilih <strong>Install app</strong> atau <strong>Add to Home Screen</strong>.</span></li>
+                      <li className="flex items-start gap-2"><span>3.</span><span>Konfirmasi install.</span></li>
+                    </ol>
+                  )}
+                </div>
+              )}
+            </div>
+        </motion.div>
+      </div>
+
+      <style jsx global>{`
+        @keyframes blob {
+          0%, 100% { border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%; }
+          34% { border-radius: 70% 30% 50% 50% / 30% 30% 70% 70%; }
+          67% { border-radius: 100% 60% 60% 100% / 100% 100% 60% 60%; }
+        }
+      `}</style>
+    </main>
+  );
+}
