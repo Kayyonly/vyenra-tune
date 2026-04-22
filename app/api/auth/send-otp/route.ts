@@ -7,11 +7,20 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: Request) {
   try {
+    if (!process.env.RESEND_API_KEY) {
+      console.error('RESEND_API_KEY missing');
+    }
+    if (!process.env.RESEND_FROM_EMAIL) {
+      console.error('RESEND_FROM_EMAIL missing');
+    }
+
     const body = await req.json();
     const email = String(body?.email ?? '').trim().toLowerCase();
     const mode = String(body?.mode ?? '').trim().toLowerCase();
     const password = String(body?.password ?? '').trim();
     const name = String(body?.name ?? '').trim();
+
+    console.log('REQUEST MASUK:', { email, mode });
 
     if (!EMAIL_REGEX.test(email)) {
       return NextResponse.json({ success: false, message: 'Email tidak valid' }, { status: 400 });
@@ -57,11 +66,13 @@ export async function POST(req: Request) {
     }
 
     const otp = generateOtpCode();
+    console.log('GENERATE OTP:', { email, otp });
     const otpRecord = await saveOtp(email, otp);
     const emailResult = await sendOtpEmail({ email, code: otp });
+    console.log('EMAIL RESULT:', { email, result: emailResult });
 
     if (!emailResult.success) {
-      return NextResponse.json({ success: false, message: 'Gagal mengirim OTP ke email.' }, { status: 500 });
+      return NextResponse.json({ success: false, message: emailResult.message || 'Gagal mengirim OTP ke email.' }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -70,7 +81,10 @@ export async function POST(req: Request) {
       expiresInMs: otpRecord.expiresAt - Date.now(),
     });
   } catch (error) {
-    console.error('[SEND_OTP_ROUTE_ERROR]', error);
-    return NextResponse.json({ success: false, message: 'Gagal kirim OTP' }, { status: 500 });
+    console.error('SEND OTP ERROR:', error);
+    return NextResponse.json(
+      { success: false, message: error instanceof Error ? error.message : 'Gagal kirim OTP' },
+      { status: 500 },
+    );
   }
 }

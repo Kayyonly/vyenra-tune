@@ -7,6 +7,8 @@ import { AuthFrame } from '@/components/auth/AuthFrame';
 import { savePendingEmail } from '@/lib/auth-client-storage';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const OTP_REQUEST_TIMEOUT_MS = 15000;
+const SEND_OTP_ENDPOINT = '/api/auth/send-otp';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -21,6 +23,7 @@ export default function RegisterPage() {
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    console.log('[REGISTER] Submit triggered');
     const normalizedEmail = form.email.trim().toLowerCase();
 
     if (!form.name.trim() || !normalizedEmail || !form.password || !form.confirmPassword) {
@@ -42,28 +45,56 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: normalizedEmail,
-          password: form.password,
-          name: form.name.trim(),
-          mode: 'register',
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), OTP_REQUEST_TIMEOUT_MS);
+      const res = await (async () => {
+        try {
+          return await fetch(SEND_OTP_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: normalizedEmail,
+              password: form.password,
+              name: form.name.trim(),
+              mode: 'register',
+            }),
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      })();
 
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data?.message ?? 'Gagal mengirim OTP.');
-        return;
+      const responseText = await res.text();
+      console.log('[REGISTER] send-otp raw response:', {
+        status: res.status,
+        ok: res.ok,
+        body: responseText,
+      });
+      let data: { message?: string; success?: boolean } = {};
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch (parseError) {
+        console.error('[REGISTER] Failed to parse send-otp response JSON:', parseError);
       }
 
+      if (!res.ok) {
+        console.error('OTP ERROR:', data);
+        throw new Error(data?.message || 'Gagal kirim OTP');
+      }
+
+      console.log('OTP SUCCESS:', data);
       savePendingEmail(normalizedEmail);
       router.push('/verify');
     } catch (requestError) {
-      console.error(requestError);
-      setError('Terjadi gangguan jaringan. Coba lagi.');
+      if (requestError instanceof Error && requestError.name === 'AbortError') {
+        console.error('[REGISTER] OTP request timeout');
+        setError('Permintaan OTP timeout. Coba lagi.');
+        return;
+      }
+
+      console.error('[REGISTER] OTP request failed:', requestError);
+      setError(requestError instanceof Error ? requestError.message : 'Terjadi gangguan jaringan. Coba lagi.');
     } finally {
       setLoading(false);
     }
