@@ -8,7 +8,57 @@ type SendOtpEmailResult = {
   message: string;
 };
 
-const DEFAULT_FROM = 'Vynra Tune <no-reply@domainkamu.com>';
+const DEFAULT_FROM = 'Vynra Tune <no-reply@kayy.my.id>';
+
+function getOtpEmailHtml(code: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+</head>
+<body style="margin:0; padding:0; background:#f4f4f5; font-family: Georgia, 'Times New Roman', serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding: 48px 0;">
+    <tr>
+      <td align="center">
+        <table width="440" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius: 4px;">
+          <tr>
+            <td style="background:#18181b; padding: 20px 36px;">
+              <span style="color:#ffffff; font-size: 15px; font-weight: bold; letter-spacing: 0.5px;">vynra tune</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px 36px 32px;">
+              <p style="margin: 0 0 20px; color: #3f3f46; font-size: 15px; line-height: 1.7;">Hai,</p>
+              <p style="margin: 0 0 32px; color: #3f3f46; font-size: 15px; line-height: 1.7;">
+                Berikut kode verifikasi untuk masuk ke akun Vynra Tune kamu:
+              </p>
+              <div style="border-left: 3px solid #18181b; padding: 16px 24px; margin-bottom: 32px; background: #fafafa;">
+                <p style="margin: 0 0 4px; color: #a1a1aa; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; font-family: sans-serif;">Kode verifikasi</p>
+                <p style="margin: 0; color: #18181b; font-size: 36px; font-weight: bold; letter-spacing: 8px; font-family: 'Courier New', monospace;">${code}</p>
+              </div>
+              <p style="margin: 0 0 8px; color: #71717a; font-size: 13px; line-height: 1.7; font-family: sans-serif;">
+                Kode berlaku selama 10 menit.
+              </p>
+              <p style="margin: 0; color: #71717a; font-size: 13px; line-height: 1.7; font-family: sans-serif;">
+                Kalau kamu tidak merasa request ini, abaikan saja email ini.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 36px 32px; border-top: 1px solid #f4f4f5;">
+              <p style="margin: 0; color: #a1a1aa; font-size: 12px; font-family: sans-serif;">
+                © 2025 Vynra Tune &nbsp;·&nbsp; <a href="https://kayy.my.id" style="color: #a1a1aa;">kayy.my.id</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
 
 export async function sendOtpEmail({ email, code }: SendOtpEmailInput): Promise<SendOtpEmailResult> {
   const apiKey = process.env.RESEND_API_KEY;
@@ -33,7 +83,7 @@ export async function sendOtpEmail({ email, code }: SendOtpEmailInput): Promise<
         from: fromEmail,
         to: email,
         subject: 'Kode Verifikasi Vynra Tune',
-        text: `Kode verifikasi kamu adalah: ${code}\nKode ini berlaku selama 15 menit.`,
+        html: getOtpEmailHtml(code),
       }),
     });
 
@@ -47,7 +97,7 @@ export async function sendOtpEmail({ email, code }: SendOtpEmailInput): Promise<
         return {
           success: false,
           message:
-            'Resend masih mode testing: verifikasi domain di https://resend.com/domains, lengkapi DNS SPF + DKIM, lalu gunakan sender seperti Vynra Tune <no-reply@domainkamu.com>.',
+            'Resend masih mode testing: verifikasi domain di https://resend.com/domains, lengkapi DNS SPF + DKIM, lalu gunakan sender seperti Vynra Tune <no-reply@kayy.my.id>.',
         };
       }
 
