@@ -11,6 +11,7 @@ import { cn, getHighResImage } from '@/lib/utils';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useMediaSession } from '@/hooks/useMediaSession';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 
 export function Player() {
   const router = useRouter();
@@ -28,12 +29,14 @@ export function Player() {
   const playPrev = usePlayerStore((state) => state.playPrev);
   const setTrackToAdd = usePlayerStore((state) => state.setTrackToAdd);
   const dominantColor = usePlayerStore((state) => state.dominantColor);
+  const requireAuth = useRequireAuth();
 
   const [isLiked, setIsLiked] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
   const playerRef = useRef<any>(null);
   const pauseRequestedRef = useRef(false);
   const progressRafRef = useRef<number | null>(null);
+
 
   useEffect(() => {
     if (currentTrack) {
@@ -43,15 +46,18 @@ export function Player() {
 
   const handleLike = useCallback(async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (!currentTrack) return;
-    if (isLiked) {
-      await db.removeLikedSong(currentTrack.videoId);
-      setIsLiked(false);
-    } else {
-      await db.addLikedSong(currentTrack);
-      setIsLiked(true);
-    }
-  }, [currentTrack, isLiked]);
+
+    requireAuth(async () => {
+      if (!currentTrack) return;
+      if (isLiked) {
+        await db.removeLikedSong(currentTrack.videoId);
+        setIsLiked(false);
+      } else {
+        await db.addLikedSong(currentTrack);
+        setIsLiked(true);
+      }
+    });
+  }, [currentTrack, isLiked, requireAuth]);
 
   const onReady = useCallback(async (event: any) => {
     playerRef.current = event.target;
@@ -398,7 +404,7 @@ export function Player() {
                     </motion.div>
                   </AnimatePresence>
                   <div className="flex items-center gap-4">
-                    <button onClick={() => setTrackToAdd(currentTrack)} className="p-2 text-white/80 hover:text-white transition">
+                    <button onClick={() => requireAuth(() => setTrackToAdd(currentTrack))} className="p-2 text-white/80 hover:text-white transition">
                       <ListPlus className="w-7 h-7" />
                     </button>
                     <button onClick={handleLike} className="p-2 text-white transition">

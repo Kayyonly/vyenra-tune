@@ -4,10 +4,12 @@ import { Play, MoreVertical, BookmarkPlus, BookmarkCheck } from 'lucide-react';
 import { usePlayerStore } from '@/lib/store';
 import { db } from '@/lib/db';
 import { useEffect, useState } from 'react';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 
 export default function AlbumClient({ album }: { album: any }) {
   const playTrack = usePlayerStore((state) => state.playTrack);
   const [isSaved, setIsSaved] = useState(false);
+  const requireAuth = useRequireAuth();
 
   useEffect(() => {
     const checkSaved = async () => {
@@ -19,23 +21,25 @@ export default function AlbumClient({ album }: { album: any }) {
    checkSaved();
   }, [album?.albumId]);
 
-    const handleToggleSave = async () => {
+  const handleToggleSave = async () => {
+    requireAuth(async () => {
       if (!album?.albumId) return;
 
-    if (isSaved) {
-      await db.removeSavedAlbum(album.albumId);
-      setIsSaved(false);
-      return;
-    }
+      if (isSaved) {
+        await db.removeSavedAlbum(album.albumId);
+        setIsSaved(false);
+        return;
+      }
 
-    await db.addSavedAlbum({
-      albumId: album.albumId,
-      name: album.name,
-      artist: album.artist?.name || 'Unknown Artist',
-      thumbnails: album.thumbnails || [],
-      savedAt: Date.now(),
+      await db.addSavedAlbum({
+        albumId: album.albumId,
+        name: album.name,
+        artist: album.artist?.name || 'Unknown Artist',
+        thumbnails: album.thumbnails || [],
+        savedAt: Date.now(),
+      });
+      setIsSaved(true);
     });
-    setIsSaved(true);
   };
 
   return (

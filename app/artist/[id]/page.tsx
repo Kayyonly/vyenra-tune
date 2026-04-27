@@ -9,6 +9,7 @@ import { TrackItem } from '@/components/TrackItem';
 import { usePlayerStore } from '@/lib/store';
 import { db } from '@/lib/db';
 import { MarqueeText } from '@/components/MarqueeText';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 
 import { ArtistSkeleton } from '@/components/ArtistSkeleton';
 
@@ -20,6 +21,7 @@ export default function ArtistPage() {
   const [isBioExpanded, setIsBioExpanded] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const playTrack = usePlayerStore((state) => state.playTrack);
+  const requireAuth = useRequireAuth();
 
   useEffect(() => {
     const fetchArtist = async () => {
@@ -44,20 +46,22 @@ export default function ArtistPage() {
   }, [params.id]);
 
   const handleSubscribe = async () => {
-    if (!artist) return;
-    
-    if (isSubscribed) {
-      await db.removeSubscribedArtist(artist.artistId);
-      setIsSubscribed(false);
-    } else {
-      await db.addSubscribedArtist({
-        artistId: artist.artistId,
-        name: artist.name,
-        thumbnails: artist.thumbnails || [],
-        subscribedAt: Date.now()
-      });
-      setIsSubscribed(true);
-    }
+    requireAuth(async () => {
+      if (!artist) return;
+
+      if (isSubscribed) {
+        await db.removeSubscribedArtist(artist.artistId);
+        setIsSubscribed(false);
+      } else {
+        await db.addSubscribedArtist({
+          artistId: artist.artistId,
+          name: artist.name,
+          thumbnails: artist.thumbnails || [],
+          subscribedAt: Date.now(),
+        });
+        setIsSubscribed(true);
+      }
+    });
   };
 
   if (loading) {
