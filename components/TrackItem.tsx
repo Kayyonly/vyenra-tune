@@ -5,6 +5,7 @@ import { MoreHorizontal, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { getHighResImage } from '@/lib/utils';
 import { MarqueeText } from './MarqueeText';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 
 export function TrackItem({ track, queue, onRemove }: { track: Track; queue?: Track[]; onRemove?: (track: Track) => void }) {
   const playTrack = usePlayerStore((state) => state.playTrack);
@@ -12,6 +13,7 @@ export function TrackItem({ track, queue, onRemove }: { track: Track; queue?: Tr
   const isPlaying = usePlayerStore((state) => state.isPlaying);
   const setTrackToAdd = usePlayerStore((state) => state.setTrackToAdd);
   const isCurrent = currentTrack?.videoId === track.videoId;
+  const requireAuth = useRequireAuth();
 
   const thumbnail = getHighResImage(track.thumbnails?.[track.thumbnails.length - 1]?.url, 200);
   const artistName = Array.isArray(track.artist) ? track.artist.map(a => a.name).join(', ') : track.artist?.name || 'Unknown Artist';
@@ -53,7 +55,7 @@ export function TrackItem({ track, queue, onRemove }: { track: Track; queue?: Tr
           className="p-2 text-white/50 hover:text-white transition-colors"
           onClick={(e) => {
             e.stopPropagation();
-            setTrackToAdd(track);
+            requireAuth(() => setTrackToAdd(track));
           }}
         >
           <MoreHorizontal className="w-5 h-5" />

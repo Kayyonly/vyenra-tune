@@ -6,6 +6,8 @@ import { AddToPlaylistModal } from '@/components/AddToPlaylistModal';
 import { PWARegister } from '@/components/PWARegister';
 import { BackgroundProvider } from '@/components/BackgroundProvider';
 import { PWAInstallButton } from '@/components/PWAInstallButton';
+import { LoginRequiredModal } from '@/components/auth/LoginRequiredModal';
+import { AuthSessionBootstrap } from '@/components/auth/AuthSessionBootstrap';
 
 export const metadata: Metadata = {
   title: 'Music App',
@@ -33,12 +35,14 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
       </head>
       <body className="text-white antialiased pb-24 min-h-screen" suppressHydrationWarning>
         <BackgroundProvider />
+        <AuthSessionBootstrap />
         <PWARegister />
         {children}
         <Player />
         <PWAInstallButton />
         <BottomNav />
         <AddToPlaylistModal />
+        <LoginRequiredModal />
       </body>
     </html>
   );
