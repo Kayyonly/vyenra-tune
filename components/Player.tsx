@@ -368,8 +368,8 @@ export function Player() {
                   </div>
                 )}
                 {showLyrics ? (
-                  <div className="flex-1 pb-8 z-10">
-                    <LyricsClient />
+                  <div className="flex-1 pb-8 z-10 pointer-events-auto">
+                    <LyricsClient onClose={() => setShowLyrics(false)} />
                   </div>
                 ) : (
                   <AnimatePresence mode="wait">

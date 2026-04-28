@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { ChevronDown } from 'lucide-react';
 import { usePlayerStore, type Track } from '@/lib/store';
 import { findActiveLyricIndex, parseLrc, type LyricLine } from '@/lib/lrc';
 
@@ -60,7 +61,11 @@ async function fetchLyrics(track: Track): Promise<LyricsApiResponse> {
   return (await res.json()) as LyricsApiResponse;
 }
 
-export default function LyricsClient() {
+interface LyricsClientProps {
+  onClose?: () => void;
+}
+
+export default function LyricsClient({ onClose }: LyricsClientProps = {}) {
   const track = usePlayerStore((state) => state.currentTrack);
   const currentTime = usePlayerStore((state) => state.progress);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
@@ -68,6 +73,16 @@ export default function LyricsClient() {
   const [state, setState] = useState<LyricsState>({ kind: 'idle' });
   const [offset, setOffset] = useState(DEFAULT_OFFSET);
   const [showDebug, setShowDebug] = useState(false);
+
+  // Close on Escape so the lyrics panel never locks the user in.
+  useEffect(() => {
+    if (!onClose) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lineRefs = useRef<Array<HTMLParagraphElement | null>>([]);
@@ -199,8 +214,25 @@ export default function LyricsClient() {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="relative flex h-full flex-col rounded-xl bg-white/5"
+        className="pointer-events-auto relative flex h-full flex-col rounded-xl bg-white/5"
       >
+        {/* Close header — always available so the panel never traps the user. */}
+        {onClose && (
+          <div className="flex items-center justify-between border-b border-white/5 px-3 py-2">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Tutup lirik"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+            >
+              <ChevronDown className="h-4 w-4" />
+              <span className="uppercase tracking-wider">Tutup</span>
+            </button>
+            <span className="text-[10px] uppercase tracking-widest text-white/40">Lirik</span>
+            <span className="w-12" />
+          </div>
+        )}
+
         {/* Fine-tune / debug toolbar */}
         {state.kind === 'synced' && (
           <div className="flex items-center justify-between gap-2 border-b border-white/5 px-4 py-2 text-xs text-white/60">
