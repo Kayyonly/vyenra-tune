@@ -6,7 +6,7 @@ import { usePlayerStore } from '@/lib/store';
 import { db } from '@/lib/db';
 import YouTube from 'react-youtube';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, SkipForward, SkipBack, Heart, ChevronDown, ListMusic, Mic2, Shuffle, Repeat, Maximize2, MoreVertical, Cast, ListPlus, User } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, Heart, ChevronDown, ListMusic, Mic2, Shuffle, Repeat, MoreVertical, Cast, ListPlus, User, X } from 'lucide-react';
 import { cn, getHighResImage } from '@/lib/utils';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -32,7 +32,7 @@ export function Player() {
   const requireAuth = useRequireAuth();
 
   const [isLiked, setIsLiked] = useState(false);
-  const [showLyrics, setShowLyrics] = useState(false);
+  const [isLyricsOpen, setIsLyricsOpen] = useState(false);
   const playerRef = useRef<any>(null);
   const pauseRequestedRef = useRef(false);
   const progressRafRef = useRef<number | null>(null);
@@ -224,6 +224,29 @@ export function Player() {
     }
   }, [isPlaying]);
 
+  useEffect(() => {
+    if (!isLyricsOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsLyricsOpen(false);
+      }
+    };
+
+    const onPopState = () => {
+      setIsLyricsOpen(false);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('popstate', onPopState);
+    window.history.pushState({ lyricsOpen: true }, '', window.location.href);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, [isLyricsOpen]);
+
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = Number(e.target.value);
     setProgress(newTime);
@@ -362,15 +385,13 @@ export function Player() {
 
               {/* Content Area */}
               <div className="flex-1 flex flex-col justify-center min-h-0 relative">
-                {showLyrics && (
+                {isLyricsOpen && (
                   <div className="absolute inset-[-50px] -z-10 overflow-hidden opacity-40 pointer-events-none">
                     <Image src={thumbnail} alt="Background" fill className="object-cover blur-[80px] scale-110" />
                   </div>
                 )}
-                {showLyrics ? (
-                  <div className="flex-1 pb-8 z-10 pointer-events-auto">
-                    <LyricsClient onClose={() => setShowLyrics(false)} />
-                  </div>
+                {isLyricsOpen ? (
+                  <div className="flex-1 pb-8 z-10 pointer-events-none" />
                 ) : (
                   <AnimatePresence mode="wait">
                     <motion.div
@@ -458,8 +479,8 @@ export function Player() {
                     <span className="text-[10px] uppercase tracking-wider">Up Next</span>
                   </button>
                   <button
-                    onClick={() => setShowLyrics(!showLyrics)}
-                    className={cn("transition flex flex-col items-center gap-1", showLyrics ? "text-white" : "text-white/80 hover:text-white")}
+                    onClick={() => setIsLyricsOpen(true)}
+                    className={cn("transition flex flex-col items-center gap-1", isLyricsOpen ? "text-white" : "text-white/80 hover:text-white")}
                   >
                     <Mic2 className="w-5 h-5" />
                     <span className="text-[10px] uppercase tracking-wider">Lyrics</span>
@@ -482,6 +503,46 @@ export function Player() {
                 </div>
               </div>
             </div>
+
+            <AnimatePresence>
+              {isLyricsOpen && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-[120] bg-black/60 backdrop-blur-[10px]"
+                  onClick={() => setIsLyricsOpen(false)}
+                  aria-hidden="true"
+                />
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {isLyricsOpen && (
+                <motion.div
+                  initial={{ y: '100%' }}
+                  animate={{ y: 0 }}
+                  exit={{ y: '100%' }}
+                  transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+                  className="absolute left-0 right-0 bottom-0 z-[130] rounded-t-3xl border border-white/10 bg-[#17171A]/95 shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+                    <h3 className="text-white font-semibold">Lyrics</h3>
+                    <button
+                      onClick={() => setIsLyricsOpen(false)}
+                      className="w-8 h-8 rounded-full border border-white/20 text-white flex items-center justify-center hover:bg-white/10 transition"
+                      aria-label="Close lyrics"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="px-5 py-4 overflow-y-auto max-h-[70vh]">
+                    <LyricsClient onClose={() => setIsLyricsOpen(false)} />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
