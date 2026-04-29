@@ -6,7 +6,7 @@ import { usePlayerStore } from '@/lib/store';
 import { db } from '@/lib/db';
 import YouTube from 'react-youtube';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, SkipForward, SkipBack, Heart, ChevronDown, ListMusic, Mic2, Shuffle, Repeat, MoreVertical, Cast, ListPlus, User, X } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, Heart, ChevronDown, ListMusic, Mic2, Shuffle, Repeat, MoreVertical, Cast, ListPlus, User, X, AlertTriangle } from 'lucide-react';
 import { cn, getHighResImage } from '@/lib/utils';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -33,9 +33,18 @@ export function Player() {
 
   const [isLiked, setIsLiked] = useState(false);
   const [isLyricsOpen, setIsLyricsOpen] = useState(false);
+  type AudioStatus = 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'buffering' | 'error';
+  const [audioStatus, setAudioStatus] = useState<AudioStatus>('idle');
+  const [audioErrorCode, setAudioErrorCode] = useState<number | null>(null);
   const playerRef = useRef<any>(null);
   const pauseRequestedRef = useRef(false);
   const progressRafRef = useRef<number | null>(null);
+  const durationRetryRef = useRef<number | null>(null);
+  const autoSkipTimerRef = useRef<number | null>(null);
+
+  const isValidVideoId = (id: string | undefined | null): id is string =>
+    typeof id === 'string' && /^[A-Za-z0-9_-]{6,}$/.test(id);
+  const hasValidVideoId = isValidVideoId(currentTrack?.videoId);
 
 
   useEffect(() => {
@@ -59,22 +68,92 @@ export function Player() {
     });
   }, [currentTrack, isLiked, requireAuth]);
 
-  const onReady = useCallback(async (event: any) => {
-    playerRef.current = event.target;
-    const duration = await event.target.getDuration();
-    setDuration(duration || 0);
+  const clearDurationRetry = () => {
+    if (durationRetryRef.current !== null) {
+      window.clearInterval(durationRetryRef.current);
+      durationRetryRef.current = null;
+    }
+  };
 
-    if (usePlayerStore.getState().isPlaying) {
-      event.target.playVideo();
+  const clearAutoSkipTimer = () => {
+    if (autoSkipTimerRef.current !== null) {
+      window.clearTimeout(autoSkipTimerRef.current);
+      autoSkipTimerRef.current = null;
+    }
+  };
+
+  const tryRefreshDuration = useCallback(async (player: any) => {
+    if (!player || typeof player.getDuration !== 'function') return;
+    const d = await player.getDuration();
+    if (d && d > 0) {
+      setDuration(d);
+      clearDurationRetry();
     }
   }, [setDuration]);
 
+  const onReady = useCallback(async (event: any) => {
+    playerRef.current = event.target;
+    setAudioErrorCode(null);
+    setAudioStatus('ready');
+    clearAutoSkipTimer();
+
+    const initialDuration = await event.target.getDuration();
+    setDuration(initialDuration || 0);
+
+    // Equivalent to audio.readyState / networkState diagnostics
+    if (process.env.NEXT_PUBLIC_AUDIO_DEBUG === 'true') {
+      console.log('[audio] onReady', {
+        videoId: currentTrack?.videoId,
+        videoUrl: typeof event.target.getVideoUrl === 'function' ? event.target.getVideoUrl() : undefined,
+        playerState: typeof event.target.getPlayerState === 'function' ? event.target.getPlayerState() : undefined,
+        duration: initialDuration,
+      });
+    }
+
+    // Retry duration up to ~5s if YT returns 0 on first poll (root cause of 0:00 bug)
+    if (!initialDuration || initialDuration <= 0) {
+      clearDurationRetry();
+      let attempts = 0;
+      durationRetryRef.current = window.setInterval(() => {
+        attempts += 1;
+        if (attempts > 10) {
+          clearDurationRetry();
+          return;
+        }
+        void tryRefreshDuration(event.target);
+      }, 500);
+    }
+
+    // Only start playback once player has signalled it's ready (canplay-equivalent)
+    if (usePlayerStore.getState().isPlaying) {
+      event.target.playVideo();
+    }
+  }, [setDuration, tryRefreshDuration, currentTrack?.videoId]);
+
   const onStateChange = useCallback(async (event: any) => {
-    if (event.data === YouTube.PlayerState.PLAYING) {
+    const state = event.data;
+
+    if (process.env.NEXT_PUBLIC_AUDIO_DEBUG === 'true') {
+      console.log('[audio] onStateChange', {
+        videoId: currentTrack?.videoId,
+        playerState: state,
+      });
+    }
+
+    if (state === YouTube.PlayerState.PLAYING) {
+      setAudioStatus('playing');
+      setAudioErrorCode(null);
       setPlaying(true);
-      const duration = await event.target.getDuration();
-      setDuration(duration || 0);
-    } else if (event.data === YouTube.PlayerState.PAUSED) {
+      const d = await event.target.getDuration();
+      if (d && d > 0) {
+        setDuration(d);
+        clearDurationRetry();
+      } else {
+        // Still 0 — keep retrying to clear 0:00 stuck-state
+        await tryRefreshDuration(event.target);
+      }
+    } else if (state === YouTube.PlayerState.PAUSED) {
+      setAudioStatus('paused');
       const shouldBePlaying = usePlayerStore.getState().isPlaying;
       if (!pauseRequestedRef.current && shouldBePlaying) {
         event.target.playVideo();
@@ -83,10 +162,43 @@ export function Player() {
       }
       pauseRequestedRef.current = false;
       setPlaying(false);
-    } else if (event.data === YouTube.PlayerState.ENDED) {
+    } else if (state === YouTube.PlayerState.BUFFERING) {
+      setAudioStatus('buffering');
+      // Late-arriving metadata: re-query duration if still 0
+      const d = usePlayerStore.getState().duration;
+      if (!d || d <= 0) await tryRefreshDuration(event.target);
+    } else if (state === YouTube.PlayerState.ENDED) {
       playNext();
     }
-  }, [setPlaying, setDuration, playNext]);
+  }, [setPlaying, setDuration, playNext, tryRefreshDuration, currentTrack?.videoId]);
+
+  const onError = useCallback((event: any) => {
+    const code: number = typeof event?.data === 'number' ? event.data : -1;
+    // YT error codes: 2 invalid id, 5 html5 error, 100 not found / private, 101 & 150 embed disabled
+    console.error('[audio] YouTube player error', {
+      videoId: currentTrack?.videoId,
+      errorCode: code,
+      message: ({
+        2: 'Invalid videoId',
+        5: 'HTML5 player error',
+        100: 'Video not found or private',
+        101: 'Embed disabled by owner',
+        150: 'Embed disabled by owner',
+      } as Record<number, string>)[code] ?? 'Unknown error',
+    });
+    setAudioErrorCode(code);
+    setAudioStatus('error');
+    setPlaying(false);
+    clearDurationRetry();
+
+    // Auto-skip to next track for unrecoverable errors
+    if (code === 100 || code === 101 || code === 150 || code === 2) {
+      clearAutoSkipTimer();
+      autoSkipTimerRef.current = window.setTimeout(() => {
+        void playNext();
+      }, 1500);
+    }
+  }, [currentTrack?.videoId, setPlaying, playNext]);
 
   const handleMediaPlay = useCallback(() => {
     pauseRequestedRef.current = false;
@@ -145,9 +257,25 @@ export function Player() {
     };
   }, [isPlaying, setProgress]);
 
-  useEffect(() => {
+  // Reset progress + audio status whenever the track changes. Done during render
+  // (React's recommended pattern) instead of an effect to avoid cascading renders.
+  const [lastTrackedVideoId, setLastTrackedVideoId] = useState<string | null>(
+    currentTrack?.videoId ?? null,
+  );
+  if (lastTrackedVideoId !== (currentTrack?.videoId ?? null)) {
+    setLastTrackedVideoId(currentTrack?.videoId ?? null);
     setProgress(0);
-  }, [currentTrack?.videoId, setProgress]);
+    setAudioStatus(currentTrack?.videoId ? 'loading' : 'idle');
+    setAudioErrorCode(null);
+  }
+
+  // Side-effect: clear pending timers when the videoId changes or component unmounts.
+  useEffect(() => {
+    return () => {
+      clearDurationRetry();
+      clearAutoSkipTimer();
+    };
+  }, [currentTrack?.videoId]);
 
   useEffect(() => {
     if (playerRef.current) {
@@ -256,9 +384,12 @@ export function Player() {
   };
 
   const handleTogglePlay = () => {
+    if (audioStatus === 'error' || !hasValidVideoId) return;
     pauseRequestedRef.current = isPlaying;
     togglePlay();
   };
+
+  const isAudioUnavailable = audioStatus === 'error' || !hasValidVideoId;
 
   if (!currentTrack) return null;
 
@@ -267,23 +398,27 @@ export function Player() {
 
   return (
     <>
-      {/* Hidden YouTube Player */}
-      <div className="fixed top-[-1000px] left-[-1000px] w-[1px] h-[1px] opacity-0 pointer-events-none">
-        <YouTube
-          videoId={currentTrack.videoId}
-          opts={{
-            height: '1',
-            width: '1',
-            playerVars: {
-              autoplay: 1,
-              controls: 0,
-              playsinline: 1,
-            },
-          }}
-          onReady={onReady}
-          onStateChange={onStateChange}
-        />
-      </div>
+      {/* Hidden YouTube Player — only mount when we have a valid videoId */}
+      {hasValidVideoId && (
+        <div className="fixed top-[-1000px] left-[-1000px] w-[1px] h-[1px] opacity-0 pointer-events-none">
+          <YouTube
+            key={currentTrack.videoId}
+            videoId={currentTrack.videoId}
+            opts={{
+              height: '1',
+              width: '1',
+              playerVars: {
+                autoplay: 1,
+                controls: 0,
+                playsinline: 1,
+              },
+            }}
+            onReady={onReady}
+            onStateChange={onStateChange}
+            onError={onError}
+          />
+        </div>
+      )}
 
       {/* Mini Player */}
       <AnimatePresence>
@@ -337,9 +472,15 @@ export function Player() {
                   e.stopPropagation();
                   handleTogglePlay();
                 }}
-                className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center text-white hover:bg-white/10 transition-colors"
+                disabled={isAudioUnavailable}
+                aria-label={isAudioUnavailable ? 'Audio tidak tersedia' : isPlaying ? 'Jeda' : 'Putar'}
+                className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center text-white hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+                {isAudioUnavailable
+                  ? <AlertTriangle className="w-5 h-5" />
+                  : isPlaying
+                    ? <Pause className="w-5 h-5 fill-current" />
+                    : <Play className="w-5 h-5 fill-current ml-0.5" />}
               </button>
               <button
                 onClick={handleLike}
@@ -400,9 +541,29 @@ export function Player() {
                       animate={{ opacity: 1, scale: isPlaying ? 1 : 0.95 }}
                       exit={{ opacity: 0, scale: 0.9 }}
                       transition={{ type: 'spring', damping: 20, stiffness: 100 }}
-                      className="w-full aspect-square rounded-xl overflow-hidden shadow-2xl mx-auto max-w-[360px]"
+                      className="w-full aspect-square rounded-xl overflow-hidden shadow-2xl mx-auto max-w-[360px] relative"
                     >
-                      <Image src={thumbnail} alt={currentTrack.name} width={500} height={500} className="w-full h-full object-cover" />
+                      <Image src={thumbnail} alt={currentTrack.name} width={500} height={500} className={cn('w-full h-full object-cover', isAudioUnavailable && 'opacity-40')} />
+                      {isAudioUnavailable && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 gap-3 bg-black/40">
+                          <AlertTriangle className="w-10 h-10 text-yellow-400" />
+                          <div className="text-white font-semibold">Audio tidak tersedia</div>
+                          <div className="text-white/70 text-xs max-w-[260px]">
+                            {audioErrorCode === 100 && 'Video tidak ditemukan atau telah dihapus.'}
+                            {(audioErrorCode === 101 || audioErrorCode === 150) && 'Pemilik video melarang pemutaran di luar YouTube.'}
+                            {audioErrorCode === 2 && 'ID video tidak valid.'}
+                            {audioErrorCode === 5 && 'Pemutar mengalami error internal.'}
+                            {!hasValidVideoId && 'Lagu ini tidak punya sumber audio yang valid.'}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { void playNext(); }}
+                            className="text-xs uppercase tracking-wider px-3 py-1.5 rounded-full bg-white text-black font-semibold hover:bg-white/90"
+                          >
+                            Lewati ke lagu berikutnya
+                          </button>
+                        </div>
+                      )}
                     </motion.div>
                   </AnimatePresence>
                 )}
@@ -460,9 +621,15 @@ export function Player() {
                   </button>
                   <button
                     onClick={handleTogglePlay}
-                    className="w-20 h-20 flex items-center justify-center bg-white text-black rounded-full hover:scale-105 transition-transform"
+                    disabled={isAudioUnavailable}
+                    aria-label={isAudioUnavailable ? 'Audio tidak tersedia' : isPlaying ? 'Jeda' : 'Putar'}
+                    className="w-20 h-20 flex items-center justify-center bg-white text-black rounded-full hover:scale-105 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
                   >
-                    {isPlaying ? <Pause className="w-10 h-10 fill-current" /> : <Play className="w-10 h-10 fill-current ml-1" />}
+                    {isAudioUnavailable
+                      ? <AlertTriangle className="w-10 h-10" />
+                      : isPlaying
+                        ? <Pause className="w-10 h-10 fill-current" />
+                        : <Play className="w-10 h-10 fill-current ml-1" />}
                   </button>
                   <button onClick={playNext} className="text-white hover:text-white transition">
                     <SkipForward className="w-10 h-10 fill-current" />
