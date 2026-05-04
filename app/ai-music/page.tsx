@@ -10,6 +10,7 @@ type ChatMessage = {
 };
 
 type AiMusicResponse = {
+  success?: boolean;
   reply?: string;
   error?: string;
   details?: string;
@@ -62,7 +63,7 @@ export default function AiMusicPage() {
 
       const payload = (await response.json()) as AiMusicResponse;
 
-      if (!response.ok) {
+      if (!response.ok || !payload.success) {
         const reason = payload.error || payload.details || `Request gagal (${response.status})`;
         throw new Error(reason);
       }
