@@ -1,7 +1,7 @@
 'use client';
 
 import { Dispatch, SetStateAction } from 'react';
-import { LogOut, LockKeyhole, UserCircle2, X } from 'lucide-react';
+import { LogOut, LockKeyhole, MessageCircle, UserCircle2, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
@@ -71,6 +71,16 @@ export function HomeSidebar({ open, setOpen }: HomeSidebarProps) {
             <LockKeyhole className="h-4 w-4" />
             Ganti Password
           </Link>
+
+          <Link
+            href="/ai-music"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-3 text-sm text-white transition hover:bg-white/10"
+          >
+            <MessageCircle className="h-4 w-4" />
+            Ai Music
+          </Link>
+
 
           <button
             onClick={onLogout}
