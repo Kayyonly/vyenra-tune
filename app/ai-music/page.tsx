@@ -1,12 +1,18 @@
 'use client';
 
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { Bot, Loader2, Send, Sparkles } from 'lucide-react';
 
 type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+};
+
+type AiMusicResponse = {
+  reply?: string;
+  error?: string;
+  details?: string;
 };
 
 const quickSuggestions = ['🔥 Lagu trending', '😢 Lagu galau', '💪 Lagu semangat'];
@@ -20,25 +26,31 @@ export default function AiMusicPage() {
     },
   ]);
   const [loading, setLoading] = useState(false);
-  const [input, setInput] = useState('');
+  const [message, setMessage] = useState('');
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const sendMessage = async (messageText: string) => {
-    const trimmed = messageText.trim();
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const sendMessage = async (rawMessage: string) => {
+    const trimmed = rawMessage.trim();
     if (!trimmed || loading) return;
 
-    const userMessage: ChatMessage = {
-      id: `${Date.now()}-user`,
-      role: 'user',
-      text: trimmed,
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-user`,
+        role: 'user',
+        text: trimmed,
+      },
+    ]);
+    setMessage('');
     setLoading(true);
 
     try {
@@ -48,14 +60,18 @@ export default function AiMusicPage() {
         body: JSON.stringify({ message: trimmed }),
       });
 
-      const payload = (await response.json()) as { reply?: string; error?: string };
+      const payload = (await response.json()) as AiMusicResponse;
 
-      if (!response.ok || !payload.reply) {
-        throw new Error(payload.error || 'AI sedang sibuk, coba lagi');
+      if (!response.ok) {
+        const reason = payload.error || payload.details || `Request gagal (${response.status})`;
+        throw new Error(reason);
       }
 
-      const replyText = payload.reply;
+      if (!payload.reply?.trim()) {
+        throw new Error('Respons AI kosong, coba pertanyaan lain.');
+      }
 
+      const replyText = payload.reply.trim();
       setMessages((prev) => [
         ...prev,
         {
@@ -64,23 +80,33 @@ export default function AiMusicPage() {
           text: replyText,
         },
       ]);
-    } catch {
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Terjadi error, coba lagi';
+      console.error('Ai Music client error:', error);
       setMessages((prev) => [
         ...prev,
         {
           id: `${Date.now()}-error`,
           role: 'assistant',
-          text: 'AI sedang sibuk, coba lagi',
+          text: `Terjadi error, coba lagi. (${detail})`,
         },
       ]);
     } finally {
       setLoading(false);
+      inputRef.current?.focus();
     }
   };
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await sendMessage(input);
+    await sendMessage(message);
+  };
+
+  const onInputKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      await sendMessage(message);
+    }
   };
 
   return (
@@ -97,6 +123,7 @@ export default function AiMusicPage() {
           {quickSuggestions.map((suggestion) => (
             <button
               key={suggestion}
+              type="button"
               onClick={() => sendMessage(suggestion)}
               className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-zinc-200 transition hover:bg-white/10"
               disabled={loading}
@@ -107,19 +134,15 @@ export default function AiMusicPage() {
         </div>
 
         <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-          {messages.map((message) => (
-            <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div
-                className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed shadow ${
-                  message.role === 'user' ? 'bg-fuchsia-500 text-white' : 'bg-white/10 text-zinc-100'
-                }`}
-              >
-                {message.role === 'assistant' && (
+          {messages.map((chat) => (
+            <div key={chat.id} className={`flex ${chat.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed shadow ${chat.role === 'user' ? 'bg-fuchsia-500 text-white' : 'bg-white/10 text-zinc-100'}`}>
+                {chat.role === 'assistant' && (
                   <span className="mb-1 flex items-center gap-1 text-xs text-fuchsia-200">
                     <Bot className="h-3.5 w-3.5" /> Ai Music
                   </span>
                 )}
-                <p className="whitespace-pre-wrap">{message.text}</p>
+                <p className="whitespace-pre-wrap">{chat.text}</p>
               </div>
             </div>
           ))}
@@ -127,7 +150,7 @@ export default function AiMusicPage() {
           {loading && (
             <div className="flex justify-start">
               <div className="flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2 text-sm text-zinc-200">
-                <Loader2 className="h-4 w-4 animate-spin" /> typing...
+                <Loader2 className="h-4 w-4 animate-spin" /> AI sedang berpikir...
               </div>
             </div>
           )}
@@ -138,14 +161,17 @@ export default function AiMusicPage() {
       <form onSubmit={onSubmit} className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[#101114]/95 p-3 backdrop-blur">
         <div className="mx-auto flex w-full max-w-2xl items-center gap-2">
           <input
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
+            ref={inputRef}
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={onInputKeyDown}
+            autoComplete="off"
             placeholder="Tanya soal musik..."
             className="h-11 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none placeholder:text-zinc-500 focus:border-fuchsia-400"
           />
           <button
             type="submit"
-            disabled={loading || !input.trim()}
+            disabled={loading || !message.trim()}
             className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-fuchsia-500 text-white transition hover:bg-fuchsia-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Send className="h-4 w-4" />

@@ -6,39 +6,39 @@ const SYSTEM_PROMPT =
 
 export async function POST(request: Request) {
   try {
-    const { message } = (await request.json()) as { message?: string };
+    const body = (await request.json()) as { message?: string };
+    const message = body.message?.trim();
 
-    if (!message?.trim()) {
-      return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+    if (!message) {
+      return NextResponse.json({ error: 'Pesan tidak boleh kosong.' }, { status: 400 });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
-
     if (!apiKey) {
-      return NextResponse.json({ error: 'AI service is not configured' }, { status: 500 });
+      console.error('Ai Music API error: GEMINI_API_KEY is missing');
+      return NextResponse.json({ error: 'Konfigurasi AI belum aktif. Hubungi admin.' }, { status: 500 });
     }
 
     const client = new GoogleGenAI({ apiKey });
 
     const response = await client.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: `${SYSTEM_PROMPT}\n\nUser: ${message.trim()}` }],
-        },
-      ],
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        temperature: 0.8,
+      },
+      contents: message,
     });
 
-    const text = response.text?.trim();
-
-    if (!text) {
-      return NextResponse.json({ reply: 'Maaf, aku belum bisa menjawab sekarang. Coba pertanyaan lain ya.' });
+    const reply = response.text?.trim();
+    if (!reply) {
+      return NextResponse.json({ error: 'Respons AI kosong, coba lagi.' }, { status: 502 });
     }
 
-    return NextResponse.json({ reply: text });
+    return NextResponse.json({ reply });
   } catch (error) {
-    console.error('Ai Music API error:', error);
-    return NextResponse.json({ error: 'AI sedang sibuk, coba lagi' }, { status: 500 });
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error('Ai Music API error detail:', detail);
+    return NextResponse.json({ error: 'Terjadi error, coba lagi', details: detail }, { status: 500 });
   }
 }
